@@ -49,6 +49,7 @@ void (* const DeepsleepCommand[])(void) PROGMEM = {
 
 uint32_t deepsleep_sleeptime = 0;
 uint8_t deepsleep_flag = 0;
+uint8_t onetimedeepsleep_flag = 0;
 
 bool DeepSleepEnabled(void)
 {
@@ -208,13 +209,42 @@ void DeepSleepStart(void)
   }
 
   AddLog(LOG_LEVEL_DEBUG, PSTR("DSL: Time %ld, next %ld, slip %ld"), timeslip, RtcSettings.nextwakeup, RtcSettings.deepsleep_slip );
-  // It may happen that wakeup in just <5 seconds in future
-  // In this case also add deepsleep to nextwakeup
-  if (RtcSettings.nextwakeup <= (LocalTime() + DEEPSLEEP_MIN_TIME) && Settings->deepsleep > 0 ) {
-    // ensure nextwakeup is at least in the future, and add 5%
-    RtcSettings.nextwakeup += (((LocalTime() + DEEPSLEEP_MIN_TIME - RtcSettings.nextwakeup) / Settings->deepsleep) + 1) * Settings->deepsleep;
-    //RtcSettings.nextwakeup += Settings->deepsleep * 0.05;
-    //AddLog(LOG_LEVEL_DEBUG, PSTR("DSL: Time too short: time %ld, next %ld, slip %ld"), timeslip, RtcSettings.nextwakeup, RtcSettings.deepsleep_slip);
+
+  //one time deep sleep - VS210415
+  if (1 == onetimedeepsleep_flag) /*multiple of hours*/
+  {
+    if (Settings->deepsleep > 24)
+    {
+      Settings->deepsleep = 1; //Limit time because it's seems to be wrong
+    }
+    //RtcSettings.nextwakeup = UtcTime() + 57900; //UTCTime + 16h + 5min
+    //RtcSettings.nextwakeup = UtcTime() + 54600; //UTCTime + 15h + 10min
+    RtcSettings.nextwakeup = UtcTime() + 3600*Settings->deepsleep + 600;
+	  Settings->deepsleep = 900; //next wakeup 15min after one long time sleeping time
+    onetimedeepsleep_flag = 0;
+  }
+  else if (2 == onetimedeepsleep_flag) /* fix time */
+  {
+    RtcSettings.nextwakeup = UtcTime() + 36600; //UTCTime + 10h + 10min
+    onetimedeepsleep_flag = 0;
+  }
+  else if (3 == onetimedeepsleep_flag) /*permanent shutdown*/
+  {
+    ESP.deepSleep(0);  //Emergency shutdown forever: Vcc to low!
+  }
+  else
+  {
+    // It may happen that wakeup in just <5 seconds in future
+    // In this case also add deepsleep to nextwakeup
+    if (RtcSettings.nextwakeup <= (LocalTime() + DEEPSLEEP_MIN_TIME) && Settings->deepsleep > 0 ) {
+      // ensure nextwakeup is at least in the future, and add 5%
+      RtcSettings.nextwakeup += (((LocalTime() + DEEPSLEEP_MIN_TIME - RtcSettings.nextwakeup) / Settings->deepsleep) + 1) * Settings->deepsleep;
+      //RtcSettings.nextwakeup += Settings->deepsleep * 0.05;
+      //AddLog(LOG_LEVEL_DEBUG, PSTR("DSL: Time too short: time %ld, next %ld, slip %ld"), timeslip, RtcSettings.nextwakeup, RtcSettings.deepsleep_slip);
+    #if defined SONNENSENSOR1 || defined SONNENSENSOR4
+       RtcSettings.nextwakeup += 60; // Correction for Sensor1
+    #endif     
+    }
   }
 
   String dt = GetDT(RtcSettings.nextwakeup);  // 2017-03-07T11:08:02
@@ -295,7 +325,29 @@ void CmndDeepsleepTime(void)
 {
   if ((0 == XdrvMailbox.payload) ||
      ((XdrvMailbox.payload > 10) && (XdrvMailbox.payload < DEEPSLEEP_MAX))) {
-    Settings->deepsleep = XdrvMailbox.payload;
+      
+    if (0 != (XdrvMailbox.payload & 0x10000000)) //one time sleep check - VS210415
+    {
+      onetimedeepsleep_flag = 1; //one time sleep activated
+      AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_VS "one time1 deep sleep detected"));
+    }
+    else if (0 != (XdrvMailbox.payload & 0x08000000)) //one time sleep check - VS210415
+    {
+      onetimedeepsleep_flag = 2; //one time sleep activated
+      Settings->deepsleep = (XdrvMailbox.payload & 0x00FFFFFF); 
+      AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_VS "one time2 deep sleep detected"));
+    }
+    else if (0 != (XdrvMailbox.payload & 0x04000000)) //one time sleep check - VS210415
+    {
+      onetimedeepsleep_flag = 3; //one time sleep activated
+      Settings->deepsleep = (XdrvMailbox.payload & 0x00FFFFFF); 
+      AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_VS "one time3 deep sleep detected"));
+    }
+    else
+    {
+      Settings->deepsleep = XdrvMailbox.payload;
+    }
+
     RtcSettings.nextwakeup = 0;
     deepsleep_flag = (0 == XdrvMailbox.payload) ? 0 : DEEPSLEEP_START_COUNTDOWN + (ResetReason() != REASON_DEEP_SLEEP_AWAKE?60:0);
     if (deepsleep_flag) {

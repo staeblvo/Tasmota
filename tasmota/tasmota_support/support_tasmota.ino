@@ -1200,6 +1200,7 @@ void PerformEverySecond(void)
         TasmotaGlobal.tele_period = 0;
 
         MqttPublishTeleState();
+        MqttPublishAllPowerState(); // VS 20200308 - State zyklisch senden, damit auch wenn WLAN waehrend Zustandswechsel aus ist, der Zustand nochmal gesendet wird
         MqttPublishTeleperiodSensor();
 
         XsnsXdrvCall(FUNC_AFTER_TELEPERIOD);
