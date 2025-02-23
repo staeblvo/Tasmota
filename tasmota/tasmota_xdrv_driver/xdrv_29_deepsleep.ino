@@ -217,6 +217,11 @@ void DeepSleepStart(void)
     //AddLog(LOG_LEVEL_DEBUG, PSTR("DSL: Time too short: time %ld, next %ld, slip %ld"), timeslip, RtcSettings.nextwakeup, RtcSettings.deepsleep_slip);
   }
 
+  if (Settings->deepsleep > 3600) //VS use this only for long wakeups
+  {
+    RtcSettings.nextwakeup = LocalTime() + Settings->deepsleep; //VS overwrite calculated wakeup
+  }
+
   String dt = GetDT(RtcSettings.nextwakeup);  // 2017-03-07T11:08:02
   if (Settings->flag3.time_append_timezone) {  // SetOption52 - Append timezone to JSON time
     dt += GetTimeZone();    // 2017-03-07T11:08:02-07:00
