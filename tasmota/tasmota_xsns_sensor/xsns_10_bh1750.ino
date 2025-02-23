@@ -36,6 +36,8 @@
 #define BH1750_ADDR1                     0x23
 #define BH1750_ADDR2                     0x5C
 
+#define BH1750_POWER_DOWN                0x00  // No active state.
+
 #define BH1750_CONTINUOUS_HIGH_RES_MODE2 0x11  // Start measurement at 0.5 lx resolution. Measurement time is approx 120ms.
 #define BH1750_CONTINUOUS_HIGH_RES_MODE  0x10  // Start measurement at 1   lx resolution. Measurement time is approx 120ms.
 #define BH1750_CONTINUOUS_LOW_RES_MODE   0x13  // Start measurement at 4   lx resolution. Measurement time is approx 16ms.
@@ -110,6 +112,14 @@ bool Bh1750SetMTreg(uint32_t sensor_index) {
     return false;
   }
   return Bh1750SetResolution(sensor_index);
+}
+
+//VS210411
+bool Bh1750SetPwrDwn(uint32_t sensor_index) {
+  Wire.beginTransmission(Bh1750_sensors[sensor_index].address);
+  uint8_t data = BH1750_POWER_DOWN;
+  Wire.write(data);
+  return (!Wire.endTransmission());
 }
 
 bool Bh1750Read(uint32_t sensor_index) {
@@ -245,6 +255,18 @@ bool Xsns10(uint32_t function) {
         Bh1750Show(0);
         break;
 #endif  // USE_WEBSERVER
+      case FUNC_SAVE_BEFORE_RESTART: //VS210411
+        for (uint32_t i = 0; i < Bh1750.count; i++) {
+          if (Bh1750SetPwrDwn(i))
+          {
+            AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_VS "BH1750 set to powerdown successfully"));
+          }
+          else
+          {
+            AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_VS "BH1750 set to powerdown failed"));
+          }
+        }
+        break; 
     }
   }
   return result;

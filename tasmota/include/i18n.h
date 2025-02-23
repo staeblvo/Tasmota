@@ -889,6 +889,7 @@
 #define D_LOG_THERMOSTAT "THE: "   // Thermostat driver
 #define D_LOG_SENSOR "SNS: "       // Sensor driver
 #define D_LOG_SENSEAIR "SNA: "     // Senseair driver
+#define D_LOG_VS "VS: "            // My adaption
 
 /********************************************************************************************/
 
