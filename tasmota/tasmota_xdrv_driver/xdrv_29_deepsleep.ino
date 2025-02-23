@@ -49,6 +49,7 @@ void (* const DeepsleepCommand[])(void) PROGMEM = {
 
 uint32_t deepsleep_sleeptime = 0;
 uint8_t deepsleep_flag = 0;
+uint8_t deepsleep4ever_flag = 0;
 
 bool DeepSleepEnabled(void)
 {
@@ -221,6 +222,11 @@ void DeepSleepStart(void)
   {
     RtcSettings.nextwakeup = LocalTime() + Settings->deepsleep; //VS overwrite calculated wakeup
   }
+  if (0 != deepsleep4ever_flag)
+  {
+    ESP.deepSleep(0);  //Emergency shutdown forever: Vcc to low!
+  }
+
 
   String dt = GetDT(RtcSettings.nextwakeup);  // 2017-03-07T11:08:02
   if (Settings->flag3.time_append_timezone) {  // SetOption52 - Append timezone to JSON time
@@ -299,8 +305,19 @@ void DeepSleepEverySecond(void)
 void CmndDeepsleepTime(void)
 {
   if ((0 == XdrvMailbox.payload) ||
-     ((XdrvMailbox.payload > 10) && (XdrvMailbox.payload < DEEPSLEEP_MAX))) {
-    Settings->deepsleep = XdrvMailbox.payload;
+     (0x10000000 == XdrvMailbox.payload) || /*VS*/
+     ((XdrvMailbox.payload > 10) && (XdrvMailbox.payload < DEEPSLEEP_MAX)))
+  {
+    if (0x10000000 == XdrvMailbox.payload) //deepsleep for ever - VS
+    {
+      deepsleep4ever_flag = 1; //deepsleep for ever activated
+      Settings->deepsleep = XdrvMailbox.payload = 20; //min sleep time
+      AddLog(LOG_LEVEL_INFO, PSTR(D_LOG_VS "deep sleep for ever detected"));
+    }
+    else
+    {
+      Settings->deepsleep = XdrvMailbox.payload;
+    }
     RtcSettings.nextwakeup = 0;
     deepsleep_flag = (0 == XdrvMailbox.payload) ? 0 : DEEPSLEEP_START_COUNTDOWN + (ResetReason() != REASON_DEEP_SLEEP_AWAKE?60:0);
     if (deepsleep_flag) {
