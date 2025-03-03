@@ -74,7 +74,8 @@ bool DeepSleepEnabled(void)
 void DeepSleepReInit(void)
 {
   if ((ResetReason() == REASON_DEEP_SLEEP_AWAKE) && DeepSleepEnabled()) {
-    if ((RtcSettings.ultradeepsleep > DEEPSLEEP_MAX_CYCLE) && (RtcSettings.ultradeepsleep < 1700000000)) {
+    if ((RtcSettings.ultradeepsleep > DEEPSLEEP_MAX_CYCLE) && (RtcSettings.ultradeepsleep < 129600)) //VS: 129600 < 36h
+    {
       // Go back to sleep after 60 minutes if requested deepsleep has not been reached
       RtcSettings.ultradeepsleep = RtcSettings.ultradeepsleep - DEEPSLEEP_MAX_CYCLE;
       AddLog(LOG_LEVEL_ERROR, PSTR("DSL: Remain DeepSleep %d"), RtcSettings.ultradeepsleep);
@@ -218,15 +219,20 @@ void DeepSleepStart(void)
     //AddLog(LOG_LEVEL_DEBUG, PSTR("DSL: Time too short: time %ld, next %ld, slip %ld"), timeslip, RtcSettings.nextwakeup, RtcSettings.deepsleep_slip);
   }
 
+  if (0 != deepsleep4ever_flag)
+  {
+    WifiShutdown();
+    RtcSettingsSave();
+    RtcRebootReset();
+#ifdef ESP8266    
+    ESP.deepSleep(0);  //Emergency shutdown forever: Vcc to low!
+#endif    
+  }
   if (Settings->deepsleep > 3600) //VS use this only for long wakeups
   {
     RtcSettings.nextwakeup = LocalTime() + Settings->deepsleep; //VS overwrite calculated wakeup
+    RtcSettings.deepsleep_slip = 10000;
   }
-  if (0 != deepsleep4ever_flag)
-  {
-    ESP.deepSleep(0);  //Emergency shutdown forever: Vcc to low!
-  }
-
 
   String dt = GetDT(RtcSettings.nextwakeup);  // 2017-03-07T11:08:02
   if (Settings->flag3.time_append_timezone) {  // SetOption52 - Append timezone to JSON time
@@ -236,18 +242,16 @@ void DeepSleepStart(void)
   // uint32_t deepsleep_sleeptime = DEEPSLEEP_MAX_CYCLE < (RtcSettings.nextwakeup - LocalTime()) ? (uint32_t)DEEPSLEEP_MAX_CYCLE : RtcSettings.nextwakeup - LocalTime();
   deepsleep_sleeptime = tmin((uint32_t)DEEPSLEEP_MAX_CYCLE ,RtcSettings.nextwakeup>0?RtcSettings.nextwakeup - LocalTime():0);
 
-  
-
   // Sending Deepsleep parameters to automation for react
   Response_P(PSTR("{\"" D_PRFX_DEEPSLEEP "\":{\"" D_JSON_TIME "\":\"%s\",\"" D_PRFX_DEEPSLEEP "\":%d,\"Wakeup\":%d}}"), (char*)dt.c_str(), LocalTime(), RtcSettings.nextwakeup);
   MqttPublishPrefixTopicRulesProcess_P(TELE, PSTR(D_PRFX_DEEPSLEEP), true);
 
-    WifiShutdown();
-    RtcSettings.ultradeepsleep = RtcSettings.nextwakeup - LocalTime();
-    RtcSettingsSave();
-    RtcRebootReset();
+  WifiShutdown();
+  RtcSettings.ultradeepsleep = RtcSettings.nextwakeup - LocalTime();
+  RtcSettingsSave();
+  RtcRebootReset();
 #ifdef ESP8266
-    ESP.deepSleep(100 * RtcSettings.deepsleep_slip * deepsleep_sleeptime);
+  ESP.deepSleep(100 * RtcSettings.deepsleep_slip * deepsleep_sleeptime);
 #endif  // ESP8266
 #ifdef ESP32
   esp_sleep_enable_timer_wakeup(100 * RtcSettings.deepsleep_slip * deepsleep_sleeptime);

@@ -28,7 +28,7 @@ tasmota/include/local_ca_descriptor.h
 variants
 variants3
 build
-build_output/*
+build_output/*/tasmota*
 firmware.map
 firmware.asm
 tasmota/tasmota.ino.cpp
